@@ -34,7 +34,7 @@
 <meta property="og:image" content="http://example.com/images/MakeMyOs01/image-20220116141334486.png">
 <meta property="og:image" content="http://example.com/images/MakeMyOs01/image-20220116132945444.png">
 <meta property="article:published_time" content="2022-01-16T18:31:31.123Z">
-<meta property="article:modified_time" content="2022-01-16T07:06:35.496Z">
+<meta property="article:modified_time" content="2022-01-16T18:56:17.814Z">
 <meta property="article:author" content="John Doe">
 <meta property="article:tag" content="操作系统">
 <meta name="twitter:card" content="summary_large_image">
@@ -260,8 +260,8 @@
 
 <p>结合寄存器CS和IP的值可以推导出。CPU即将执行的第一条指令，位于物理地址0xffff0000 + 0xfff0=’0xfffffff0’处。<br>而这条指令通常是一个跳转指令，目的是为了将CPU执行引向主板BIOS程序的入口点。<br>(有过装机经验的朋友知道，在开机按下F12进入BIOS配置界面时，而这个BIOS配置界面不就是BIOS程序的一部分吗。就是说你在BIOS配置界面配置时，此时CPU已经执行过地址’0xfffffff0’处跳转指令，正在运行BIOS程序。)以我目前的知识只知道，BIOS程序完成的功能有，设备检测，启动项管理，根据启动项选择启动设备，并启动(硬盘启动，软盘启动，u盘启动)。</p>
 <h3 id="BIOS引导"><a href="#BIOS引导" class="headerlink" title="BIOS引导"></a>BIOS引导</h3><p>假设BIOS根据启动项，选择了软盘启动。BIOS程序会去检查软盘是否有引导闪区。如果软盘存在引导扇区就把扇区的数据复制到内存地址0x7c00处，跳转到0x7c00处执行。意味着CPU离开BIOS程序开始执行Bootloader。</p>
-<p>引导闪区定义(软盘):软盘的第0磁头，第0磁道，第一个扇区十分以0x550xaa结尾。<br><img src="/images/MakeMyOs01/image-20220116130753285.png" srcset="/img/loading.gif" lazyload alt="image-20220116130753285" style="zoom: 33%;" />引用</p>
-<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs awk">一个<span class="hljs-number">64</span>位操作系统的设计与实现<br>Intel手册第三卷第九章<br>清华大学操作系统试验课程<br>Linux 内核揭秘https:<span class="hljs-regexp">//gi</span>thub.com<span class="hljs-regexp">/MintCN/</span>linux-insides-zh<br></code></pre></td></tr></table></figure>
+<p>引导闪区定义(软盘):软盘的第0磁头，第0磁道，第一个扇区十分以0x550xaa结尾。<br><img src="/images/MakeMyOs01/image-20220116130753285.png" srcset="/img/loading.gif" lazyload alt="image-20220116130753285" style="zoom: 33%;" /></p>
+<h3 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h3><figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs awk">一个<span class="hljs-number">64</span>位操作系统的设计与实现<br>Intel手册第三卷第九章<br>清华大学操作系统试验课程<br>Linux 内核揭秘https:<span class="hljs-regexp">//gi</span>thub.com<span class="hljs-regexp">/MintCN/</span>linux-insides-zh<br></code></pre></td></tr></table></figure>
 
 <h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>自己制作一个简单“引导”程序放在，软盘(虚拟)的引导扇区，用Boches虚拟机执行。（附加:在根据清华大学os课程，用qemu复现）</p>
 <p>实验环境描述</p>
