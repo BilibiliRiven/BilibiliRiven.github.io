@@ -1,0 +1,465 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/favicon.png">
+  <link rel="icon" href="/img/favicon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="John Doe">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="Linux内核调试环境搭建偶尔要分析一下Linux内核，内核探针有时并不能满足需要（例如调试分析CVE）。采用VM虚拟机通过管道加IDA双机调试很卡，调试体验很差。用KDB双机调试也是卡，有时还会断点无效，死机也是常事。Visual Studio调试内核依然不方便，重点是卡慢。最终还是学习Google使用QEMU调试内核。（网上一大推调试文章，能用好用的并不多，我跟着一路折腾过来真把我弄得够呛。给">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux内核调试">
+<meta property="og:url" content="http://example.com/2022/01/17/LinuxKernelDbg/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="Linux内核调试环境搭建偶尔要分析一下Linux内核，内核探针有时并不能满足需要（例如调试分析CVE）。采用VM虚拟机通过管道加IDA双机调试很卡，调试体验很差。用KDB双机调试也是卡，有时还会断点无效，死机也是常事。Visual Studio调试内核依然不方便，重点是卡慢。最终还是学习Google使用QEMU调试内核。（网上一大推调试文章，能用好用的并不多，我跟着一路折腾过来真把我弄得够呛。给">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/images/LinuxKernelDbg/image-20220117024152557.png">
+<meta property="article:published_time" content="2022-01-16T18:37:24.000Z">
+<meta property="article:modified_time" content="2022-01-16T18:41:55.189Z">
+<meta property="article:author" content="John Doe">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="http://example.com/images/LinuxKernelDbg/image-20220117024152557.png">
+  
+  
+  <title>Linux内核调试 - Hexo</title>
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css" />
+
+
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@4/github-markdown.min.css" />
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hint.css@2/hint.min.css" />
+
+  
+    
+    
+      
+      <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@10/styles/github-gist.min.css" />
+    
+  
+
+  
+    <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.css" />
+  
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1749284_ba1fz6golrf.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1736178_lbnruvf0jn.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+<!-- 自定义样式保持在最底部 -->
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    var CONFIG = {"hostname":"example.com","root":"/","version":"1.8.14","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"right","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"copy_btn":true,"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"baidu":null,"google":null,"gtag":null,"tencent":{"sid":null,"cid":null},"woyaola":null,"cnzz":null,"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false}},"search_path":"/local-search.xml"};
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+<meta name="generator" content="Hexo 6.0.0"></head>
+
+
+<body>
+  <header style="height: 70vh;">
+    <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="iconfont icon-home-fill"></i>
+                Home
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/">
+                <i class="iconfont icon-archive-fill"></i>
+                Archives
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/">
+                <i class="iconfont icon-category-fill"></i>
+                Categories
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/">
+                <i class="iconfont icon-tags-fill"></i>
+                Tags
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/">
+                <i class="iconfont icon-user-fill"></i>
+                About
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              &nbsp;<i class="iconfont icon-search"></i>&nbsp;
+            </a>
+          </li>
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">&nbsp;<i
+                class="iconfont icon-dark" id="color-toggle-icon"></i>&nbsp;</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+    <div class="banner" id="banner" parallax=true
+         style="background: url('/img/background.webp') no-repeat center center;
+           background-size: cover;">
+      <div class="full-bg-img">
+        <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+          <div class="page-header text-center fade-in-up">
+            <span class="h2" id="subtitle" title="Linux内核调试">
+              
+            </span>
+
+            
+              <div class="mt-3">
+  
+  
+    <span class="post-meta">
+      <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+      <time datetime="2022-01-17 02:37" pubdate>
+        January 17, 2022 am
+      </time>
+    </span>
+  
+</div>
+
+<div class="mt-1">
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-chart"></i>
+      7k 字
+    </span>
+  
+
+  
+    <span class="post-meta mr-2">
+      <i class="iconfont icon-clock-fill"></i>
+      
+      
+      59 分钟
+    </span>
+  
+
+  
+  
+</div>
+
+            
+          </div>
+
+          
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="d-none d-lg-block col-lg-2"></div>
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div class="py-5" id="board">
+          <article class="post-content mx-auto">
+            <!-- SEO header -->
+            <h1 style="display: none">Linux内核调试</h1>
+            
+            <div class="markdown-body">
+              <h1 id="Linux内核调试环境搭建"><a href="#Linux内核调试环境搭建" class="headerlink" title="Linux内核调试环境搭建"></a>Linux内核调试环境搭建</h1><p>偶尔要分析一下Linux内核，内核探针有时并不能满足需要（例如调试分析CVE）。采用VM虚拟机通过管道加IDA双机调试很卡，调试体验很差。用KDB双机调试也是卡，有时还会断点无效，死机也是常事。Visual Studio调试内核依然不方便，重点是卡慢。最终还是学习Google使用QEMU调试内核。（网上一大推调试文章，能用好用的并不多，我跟着一路折腾过来真把我弄得够呛。给后来人一个忠告，老老实实在开启虚拟化的Linux虚拟机中使用QEMU+gdb）</p>
+<h1 id="靠谱点的资料"><a href="#靠谱点的资料" class="headerlink" title="靠谱点的资料"></a>靠谱点的资料</h1><p>多读牛逼人的一手资料，官方文档。每次找资料真找的我血压升高。下面文档高质量的有google的文章，和jiayy的文章还有看雪的文章。</p>
+<figure class="highlight awk"><table><tr><td class="gutter"><div class="code-wrapper"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></div></td><td class="code"><pre><code class="hljs awk">https:<span class="hljs-regexp">//</span>www.starlab.io<span class="hljs-regexp">/blog/u</span>sing-gdb-to-debug-the-linux-kernel<br>https:<span class="hljs-regexp">//gi</span>thub.com<span class="hljs-regexp">/google/</span>syzkaller<span class="hljs-regexp">/blob/m</span>aster<span class="hljs-regexp">/docs/</span>linux/setup_ubuntu-host_qemu-vm_x86-<span class="hljs-number">64</span>-kernel.md<br>https:<span class="hljs-regexp">//</span>www.kernel.org<span class="hljs-regexp">/doc/</span>html<span class="hljs-regexp">/latest/</span>dev-tools/gdb-kernel-debugging.html<br>https:<span class="hljs-regexp">//</span>bbs.pediy.com/thread-<span class="hljs-number">252344</span>.htm<br>http:<span class="hljs-regexp">//</span>jiayy.me<span class="hljs-regexp">/2020/</span><span class="hljs-number">05</span><span class="hljs-regexp">/13/</span>qemu+gdb+kernel/<br></code></pre></td></tr></table></figure>
+<h2 id="我的环境搭建过程"><a href="#我的环境搭建过程" class="headerlink" title="我的环境搭建过程"></a>我的环境搭建过程</h2><h3 id="Ubuntu安装VMTool"><a href="#Ubuntu安装VMTool" class="headerlink" title="Ubuntu安装VMTool"></a>Ubuntu安装VMTool</h3><p>拷贝vmare-tools-distrib到桌面。<br>运行tar -zxvf解压<br>运行sudo ./vmare-install.ph</p>
+<figure class="highlight clean"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs clean">### 修复不能从桌面拷贝的问题<br>sudo apt-get install open-vm-tools-desktop<br>### 能选Yes就Yes，剩下一路默认就好<br></code></pre></td></tr></table></figure>
+<h3 id="修改Ubuntu源"><a href="#修改Ubuntu源" class="headerlink" title="修改Ubuntu源"></a>修改Ubuntu源</h3><p>获取Codename</p>
+<figure class="highlight css"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs css">lsb_release -<span class="hljs-selector-tag">a</span><br></code></pre></td></tr></table></figure>
+<p>将TODO替换成Codename</p>
+<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs awk">deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-security main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-security main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-updates main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-updates main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-proposed main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-proposed main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-backports main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> TODO-backports main restricted universe multiverse<br></code></pre></td></tr></table></figure>
+<p>替换后格式如下</p>
+<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs awk">deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-security main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-security main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-updates main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-updates main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-proposed main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-proposed main restricted universe multiverse<br><br>deb http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-backports main restricted universe multiverse<br>deb-src http:<span class="hljs-regexp">//mi</span>rrors.aliyun.com<span class="hljs-regexp">/ubuntu/</span> focal-backports main restricted universe multiverse<br></code></pre></td></tr></table></figure>
+<p>更新软件列表</p>
+<figure class="highlight ebnf"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs ebnf"><span class="hljs-attribute">sudo apt update</span><br></code></pre></td></tr></table></figure>
+<h3 id="编译Linux内核"><a href="#编译Linux内核" class="headerlink" title="编译Linux内核"></a>编译Linux内核</h3><p>环境准备</p>
+<figure class="highlight mipsasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs mipsasm"><span class="hljs-comment"># make menuconfig的相关依赖</span><br>sudo apt <span class="hljs-keyword">install </span>libncurses-dev<br>sudo apt <span class="hljs-keyword">install </span>flex<br>sudo apt <span class="hljs-keyword">install </span><span class="hljs-keyword">bison</span><br><span class="hljs-keyword"></span><span class="hljs-comment"># make 编译需要</span><br>sudo apt <span class="hljs-keyword">install </span><span class="hljs-keyword">build-essentail </span><span class="hljs-comment"># 可能不需要</span><br>sudo apt <span class="hljs-keyword">install </span>libssl-dev<br>sudo apt <span class="hljs-keyword">install </span>libelf-dev<br></code></pre></td></tr></table></figure>
+<figure class="highlight vala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs vala">make defconfig kvm_guest.config<br>make menuconfig<br><span class="hljs-meta">#CONFIG_GDB_SCRIPTS=enabled</span><br><span class="hljs-meta">#CONFIG_DEBUG_INFO_REDUCED =off</span><br><span class="hljs-meta">#CONFIG_FRAME_POINTER=enabled</span><br><span class="hljs-meta">#CONFIG_RANDOMIZE_BASE=off</span><br><br></code></pre></td></tr></table></figure>
+<figure class="highlight reasonml"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs reasonml">make bzImage -j<span class="hljs-constructor">$(<span class="hljs-params">nproc</span>)</span><span class="hljs-operator"> &amp;&amp; </span>make vmlinux -j<span class="hljs-constructor">$(<span class="hljs-params">nproc</span>)</span><br></code></pre></td></tr></table></figure>
+
+<h2 id="配置QEMU虚拟机"><a href="#配置QEMU虚拟机" class="headerlink" title="配置QEMU虚拟机"></a>配置QEMU虚拟机</h2><figure class="highlight cmake"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs cmake">sudo apt <span class="hljs-keyword">install</span> qemu<br>sudo apt <span class="hljs-keyword">install</span> qemu-system-x86<br></code></pre></td></tr></table></figure>
+<figure class="highlight gradle"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs gradle">qemu-system-x86_64   \<br>-smp <span class="hljs-number">4</span> \<br>-enable-kvm -m <span class="hljs-number">2</span>G -nographic \<br>-kernel <span class="hljs-regexp">/path-to/</span>linux<span class="hljs-regexp">/arch/</span>x86<span class="hljs-regexp">/boot/</span>bzImage  \<br>-<span class="hljs-keyword">append</span> <span class="hljs-string">&quot;console=ttyS0 root=/dev/sda earlyprintk=serial rw nokaslr&quot;</span>  \<br>-drive <span class="hljs-keyword">file</span>=<span class="hljs-regexp">/path-to/</span>focal.img,format=raw   \<br>-device e1000,netdev=t0  \<br>-pidfile vm.pid \<br>-netdev user,id=t0,hostfwd=tcp::<span class="hljs-number">10022</span>-:<span class="hljs-number">22</span> -s -S  <br></code></pre></td></tr></table></figure>
+
+<h3 id="配置wget代理"><a href="#配置wget代理" class="headerlink" title="配置wget代理"></a>配置wget代理</h3><p>能访问外网的实验室就不用了。</p>
+<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs awk"><span class="hljs-regexp">/etc/</span>wgetrc<br><span class="hljs-comment">#You can set the default proxies for Wget to use for http, https, and ftp.</span><br><span class="hljs-comment"># They will override the value in the environment.</span><br>https_proxy = http:<span class="hljs-regexp">//</span><span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">7890</span>/<br>http_proxy = http:<span class="hljs-regexp">//</span><span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">7890</span>/<br>ftp_proxy = http:<span class="hljs-regexp">//</span><span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">7890</span>/<br><br><span class="hljs-comment"># If you do not want to use proxy at all, set this to off.</span><br>use_proxy = on<br></code></pre></td></tr></table></figure>
+
+<h3 id="配置磁盘镜像"><a href="#配置磁盘镜像" class="headerlink" title="配置磁盘镜像"></a>配置磁盘镜像</h3><p>安装debootstrap</p>
+<figure class="highlight cmake"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs cmake">sudo apt <span class="hljs-keyword">install</span> debootstrap<br></code></pre></td></tr></table></figure>
+
+<p>通过debootstrap构建ubuntu镜像。</p>
+<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br></pre></td><td class="code"><pre><code class="hljs awk"><span class="hljs-comment">#!/bin/bash</span><br><span class="hljs-comment"># create-image.sh creates a minimal ubuntu image suitable for kernel debugging.</span><br><span class="hljs-comment"># Copyright 2020 chengjia4574@gmail.com（修改了一点点）</span><br><br>set -eux<br><br><span class="hljs-comment">#RELEASE=eoan  # ubuntu19.10</span><br>RELEASE=focal <span class="hljs-comment"># ubuntu20.04</span><br><br>DIR=chroot-<span class="hljs-variable">$RELEASE</span><br>sudo rm -rf <span class="hljs-variable">$DIR</span><br>sudo mkdir -p <span class="hljs-variable">$DIR</span><br>sudo chmod <span class="hljs-number">0755</span> <span class="hljs-variable">$DIR</span><br><br>INSTALL_PKGS=openssh-server,curl,tar,gcc,libc6-dev,time,strace,sudo,less,psmisc,net-tools,build-essential,vim,git,make<br><br>sudo debootstrap --include=<span class="hljs-variable">$INSTALL_PKGS</span> --components=main,contrib,non-free <span class="hljs-variable">$RELEASE</span> <span class="hljs-variable">$DIR</span><br><br><span class="hljs-comment"># Set some defaults and enable promtless ssh to the machine for root.</span><br>sudo sed -i <span class="hljs-string">&#x27;/^root/ &#123; s/:x:/::/ &#125;&#x27;</span> <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>passwd<br>echo <span class="hljs-string">&#x27;T0:23:respawn:/sbin/getty -L ttyS0 115200 vt100&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/i</span>nittab<br><span class="hljs-comment"># 必须关闭 kaslr 才可以正常调试内核</span><br>echo <span class="hljs-string">&#x27;GRUB_CMDLINE_LINUX_DEFAULT=&quot;nokaslr&quot;&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>default/grub<br><span class="hljs-comment"># /etc/network/interfaces 已经被 ubuntu 放弃，改为了　netplan 方式</span><br>printf <span class="hljs-string">&#x27;network:\n version: 2\n renderer: networkd\n ethernets:\n enp0s3:\n dhcp4: true\n&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>netplan/<span class="hljs-number">01</span>-network-manager-all.yaml<br>echo <span class="hljs-string">&#x27;/dev/root / ext4 defaults 0 0&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>fstab<br>echo <span class="hljs-string">&#x27;debugfs /sys/kernel/debug debugfs defaults 0 0&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>fstab<br>echo <span class="hljs-string">&#x27;securityfs /sys/kernel/security securityfs defaults 0 0&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>fstab<br>echo <span class="hljs-string">&#x27;configfs /sys/kernel/config/ configfs defaults 0 0&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>fstab<br>echo <span class="hljs-string">&#x27;binfmt_misc /proc/sys/fs/binfmt_misc binfmt_misc defaults 0 0&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>fstab<br>echo <span class="hljs-string">&quot;kernel.printk = 7 4 1 3&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&#x27;debug.exception-trace = 0&#x27;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;net.core.bpf_jit_enable = 1&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;net.core.bpf_jit_kallsyms = 1&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;net.core.bpf_jit_harden = 0&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;kernel.softlockup_all_cpu_backtrace = 1&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;kernel.kptr_restrict = 0&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;kernel.watchdog_thresh = 60&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo <span class="hljs-string">&quot;net.ipv4.ping_group_range = 0 65535&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>sysctl.conf<br>echo -en <span class="hljs-string">&quot;127.0.0.1\tlocalhost\n&quot;</span> | sudo tee <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>hosts<br>echo <span class="hljs-string">&quot;nameserver 8.8.8.8&quot;</span> | sudo tee -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>resolve.conf<br>echo <span class="hljs-string">&quot;jiayy&quot;</span> | sudo tee <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/etc/</span>hostname<br>ssh-keygen -f <span class="hljs-variable">$RELEASE</span>.id_rsa -t rsa -N <span class="hljs-string">&#x27;&#x27;</span><br>sudo mkdir -p <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/root/</span>.ssh/<br>cat <span class="hljs-variable">$RELEASE</span>.id_rsa.pub | sudo tee <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/root/</span>.ssh/authorized_keys<br><br><span class="hljs-comment"># Build a disk image</span><br>dd <span class="hljs-keyword">if</span>=<span class="hljs-regexp">/dev/</span>zero of=<span class="hljs-variable">$RELEASE</span>.img bs=<span class="hljs-number">1</span>G seek=<span class="hljs-number">20</span> count=<span class="hljs-number">1</span><br>sudo mkfs.ext4 -F <span class="hljs-variable">$RELEASE</span>.img<br>sudo mkdir -p <span class="hljs-regexp">/mnt/</span><span class="hljs-variable">$DIR</span><br>sudo mount -o loop <span class="hljs-variable">$RELEASE</span>.img <span class="hljs-regexp">/mnt/</span><span class="hljs-variable">$DIR</span><br>sudo cp -a <span class="hljs-variable">$DIR</span><span class="hljs-regexp">/. /m</span>nt<span class="hljs-regexp">/$DIR/</span>.<br>sudo umount <span class="hljs-regexp">/mnt/</span><span class="hljs-variable">$DIR</span><br><br></code></pre></td></tr></table></figure>
+
+<p>采用google方法构建Debian Stretch Linux镜像(原理一样)<br>前期不要纠结脚本内容以及含义快点把这步过去早点开始调试Linux内核。</p>
+<figure class="highlight dsconfig"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs dsconfig"><span class="hljs-string">mkdir</span> $<span class="hljs-string">IMAGE</span><br><span class="hljs-string">cd</span> $<span class="hljs-string">IMAGE</span>/<br><span class="hljs-string">sudo</span> <span class="hljs-string">wget</span> <span class="hljs-string">https</span>://<span class="hljs-string">raw</span>.<span class="hljs-string">githubusercontent</span>.<span class="hljs-string">com</span>/<span class="hljs-string">google</span>/<span class="hljs-string">syzkaller</span>/<span class="hljs-string">master</span>/<span class="hljs-string">tools</span>/<span class="hljs-built_in">create-image.sh</span> -<span class="hljs-string">O</span> <span class="hljs-built_in">create-image.sh</span><br><span class="hljs-string">chmod</span> +<span class="hljs-string">x</span> <span class="hljs-built_in">create-image.sh</span><br>./<span class="hljs-built_in">create-image.sh</span><br></code></pre></td></tr></table></figure>
+<p><img src="/images/LinuxKernelDbg/image-20220117024152557.png" srcset="/img/loading.gif" lazyload alt="image-20220117024152557"></p>
+<h2 id="启动Qemu虚拟机"><a href="#启动Qemu虚拟机" class="headerlink" title="启动Qemu虚拟机"></a>启动Qemu虚拟机</h2><figure class="highlight haml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs haml">qemu-system-x86_64 \<br>	-<span class="ruby">m 2G \</span><br><span class="ruby"></span>	-<span class="ruby">smp <span class="hljs-number">2</span> \</span><br><span class="ruby"></span>	-<span class="ruby">kernel <span class="hljs-variable">$KERNEL</span>/arch/x86/boot/bzImage \</span><br><span class="ruby"></span>	-<span class="ruby">append <span class="hljs-string">&quot;console=ttyS0 root=/dev/sda earlyprintk=serial net.ifnames=0&quot;</span> \</span><br><span class="ruby"></span>	-<span class="ruby">drive file=<span class="hljs-variable">$IMAGE</span>/stretch.img,format=raw \</span><br><span class="ruby"></span>	-<span class="ruby">net user,host=<span class="hljs-number">10.0</span>.<span class="hljs-number">2.10</span>,hostfwd=<span class="hljs-symbol">tcp:</span><span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span><span class="hljs-symbol">:</span><span class="hljs-number">10021</span>-<span class="hljs-symbol">:</span><span class="hljs-number">22</span> \</span><br><span class="ruby"></span>	-<span class="ruby">net nic,model=e1000 \</span><br><span class="ruby"></span>	-<span class="ruby">enable-kvm \</span><br><span class="ruby"></span>	-<span class="ruby">nographic \</span><br><span class="ruby"></span>	-<span class="ruby">pidfile vm.pid \</span><br><span class="ruby"></span>	2&gt;&amp;1 | tee vm.log<br></code></pre></td></tr></table></figure>
+
+<h2 id="安装gef"><a href="#安装gef" class="headerlink" title="安装gef"></a>安装gef</h2><p>如果公司没有代理，就手动下载gdbinit-gef.py，执行命令。<br>不过最好提前先备份~/.gdbinit。</p>
+<figure class="highlight gradle"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs gradle">$ wget -O ~<span class="hljs-regexp">/.gdbinit-gef.py -q http:/</span><span class="hljs-regexp">/gef.blah.cat/</span>py<br>$ echo <span class="hljs-keyword">source</span> ~<span class="hljs-regexp">/.gdbinit-gef.py &gt;&gt; ~/</span>.gdbinit<br></code></pre></td></tr></table></figure>
+
+            </div>
+            <hr>
+            <div>
+              <div class="post-metas mb-3">
+                
+                
+              </div>
+              
+                <p class="note note-warning">
+                  
+                    本博客所有文章除特别声明外，均采用 <a target="_blank" href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh" rel="nofollow noopener noopener">CC BY-SA 4.0 协议</a> ，转载请注明出处！
+                  
+                </p>
+              
+              
+                <div class="post-prevnext">
+                  <article class="post-prev col-6">
+                    
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2022/01/17/MakeMyOs01/">
+                        <span class="hidden-mobile">从零开始自制操作系统01</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+    
+      <div class="d-none d-lg-block col-lg-2 toc-container" id="toc-ctn">
+        <div id="toc">
+  <p class="toc-header"><i class="iconfont icon-list"></i>&nbsp;TOC</p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+      </div>
+    
+  </div>
+</div>
+
+<!-- Custom -->
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v"
+                 for="local-search-input">keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+
+    
+  </main>
+
+  <footer class="text-center mt-5 py-3">
+  <div class="footer-content">
+     <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+  </div>
+  
+
+  
+
+  
+</footer>
+
+
+  <!-- SCRIPTS -->
+  
+  <script  src="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nprogress@0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js" ></script>
+<script  src="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+<!-- Plugins -->
+
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+  
+
+
+
+  
+    <script  src="https://cdn.jsdelivr.net/npm/tocbot@4/dist/tocbot.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3/dist/jquery.fancybox.min.js" ></script>
+  
+  
+    <script  src="https://cdn.jsdelivr.net/npm/anchor-js@4/anchor.min.js" ></script>
+  
+  
+    <script defer src="https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js" ></script>
+  
+
+
+
+
+
+
+  <script  src="https://cdn.jsdelivr.net/npm/typed.js@2/lib/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var title = document.getElementById('subtitle').title;
+      
+        typing(title);
+      
+    })(window, document);
+  </script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- 主题的启动项 保持在最底部 -->
+<script  src="/js/boot.js" ></script>
+
+
+</body>
+</html>
